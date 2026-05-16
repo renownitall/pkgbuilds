@@ -1,6 +1,6 @@
 # pkgbuilds
 
-Arch Linux PKGBUILDs for packages I use that aren't available in the official repositories or the AUR.
+Arch Linux PKGBUILDs for packages I use (that aren't available in the official repositories, or the AUR).
 
 Packages are built automatically via GitHub Actions and served as a pacman repository through GitHub Pages.
 
