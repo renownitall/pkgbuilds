@@ -1,0 +1,112 @@
+# Maintainer: Akira Meisei <renownitall@gmail.com>
+pkgname=ttf-google-sans-code-nerd
+pkgver=17
+pkgrel=1
+pkgdesc="Google Sans Code font family, patched with Nerd Fonts glyphs"
+arch=('any')
+url="https://fonts.google.com/specimen/Google+Sans+Code"
+license=('OFL-1.1')
+depends=('fontconfig')
+makedepends=('curl' 'fontforge' 'unzip')
+install="$pkgname.install"
+source=("https://github.com/ryanoasis/nerd-fonts/releases/latest/download/FontPatcher.zip")
+sha256sums=('SKIP') # Pin to a tagged release URL and set a real hash for reproducible builds
+
+_android_ua="Mozilla/5.0 (Linux; U; Android 2.2; en-us; Nexus One Build/FRF91) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1"
+
+_weight_name() {
+  case "$1" in
+  100) echo "Thin" ;;
+  200) echo "ExtraLight" ;;
+  300) echo "Light" ;;
+  400) echo "Regular" ;;
+  500) echo "Medium" ;;
+  600) echo "SemiBold" ;;
+  700) echo "Bold" ;;
+  800) echo "ExtraBold" ;;
+  900) echo "Black" ;;
+  *) echo "Unknown" ;;
+  esac
+}
+
+prepare() {
+  mkdir -p "$srcdir/google-sans-code"
+  mkdir -p "$srcdir/patched"
+  mkdir -p "$srcdir/patched-mono"
+
+  msg2 "Fetching Google Sans Code font URLs from Google Fonts API..."
+  local css
+  css=$(curl -s \
+    -A "$_android_ua" \
+    "https://fonts.googleapis.com/css2?family=Google+Sans+Code:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900")
+
+  if [[ -z "$css" ]]; then
+    error "Failed to fetch font CSS from Google Fonts API."
+    return 1
+  fi
+
+  while read -r weight style url; do
+    local weight_name filename
+    weight_name=$(_weight_name "$weight")
+
+    if [[ "$style" == "italic" ]]; then
+      if [[ "$weight_name" == "Regular" ]]; then
+        filename="GoogleSansCode-Italic.ttf"
+      else
+        filename="GoogleSansCode-${weight_name}Italic.ttf"
+      fi
+    else
+      filename="GoogleSansCode-${weight_name}.ttf"
+    fi
+
+    msg2 "Downloading $filename..."
+    curl -s -L \
+      -A "$_android_ua" \
+      -o "$srcdir/google-sans-code/$filename" \
+      "$url"
+
+    if ! file "$srcdir/google-sans-code/$filename" | grep -q "TrueType\|font"; then
+      error "$filename does not appear to be a valid font file."
+      return 1
+    fi
+  done < <(awk '
+        /font-style/  { gsub(/.*font-style:[[:space:]]*|;[[:space:]]*$/, ""); style=$0 }
+        /font-weight/ { gsub(/.*font-weight:[[:space:]]*|;[[:space:]]*$/, ""); weight=$0 }
+        /src: url/    { gsub(/.*url\(|\).*/, ""); url=$0 }
+        /^}/          { if (weight && style && url) print weight, style, url
+                        weight=""; style=""; url="" }
+    ' <<<"$css")
+}
+
+build() {
+  while read -r ttf; do
+    msg2 "Patching (Nerd Font): $ttf..."
+    fontforge -script "$srcdir/font-patcher" \
+      "$ttf" \
+      --complete \
+      --out "$srcdir/patched"
+
+    msg2 "Patching (Nerd Font Mono): $ttf..."
+    fontforge -script "$srcdir/font-patcher" \
+      "$ttf" \
+      --complete \
+      --mono \
+      --out "$srcdir/patched-mono"
+  done < <(find "$srcdir/google-sans-code" -name "*.ttf")
+}
+
+package() {
+  install -dm755 "$pkgdir/usr/share/fonts/google-sans-code-nerd"
+
+  # Install original (unpatched) Google Sans Code fonts
+  find "$srcdir/google-sans-code" -name "*.ttf" -exec \
+    install -Dm644 {} "$pkgdir/usr/share/fonts/google-sans-code-nerd/" \;
+
+  # Install Nerd Font patched variants
+  find "$srcdir/patched" -name "*.ttf" -exec \
+    install -Dm644 {} "$pkgdir/usr/share/fonts/google-sans-code-nerd/" \;
+
+  # Install Nerd Font Mono patched variants
+  find "$srcdir/patched-mono" -name "*.ttf" -exec \
+    install -Dm644 {} "$pkgdir/usr/share/fonts/google-sans-code-nerd/" \;
+}

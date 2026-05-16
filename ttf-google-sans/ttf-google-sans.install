@@ -1,0 +1,11 @@
+post_install() {
+  fc-cache -f
+}
+
+post_upgrade() {
+  fc-cache -f
+}
+
+post_remove() {
+  fc-cache -f
+}

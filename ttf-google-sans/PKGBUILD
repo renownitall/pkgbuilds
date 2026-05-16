@@ -1,0 +1,84 @@
+# Maintainer: Akira Meisei <renownitall@gmail.com>
+pkgname=ttf-google-sans
+pkgver=67
+pkgrel=1
+pkgdesc="Google Sans font family by Google"
+arch=('any')
+url="https://fonts.google.com/specimen/Google+Sans"
+license=('OFL-1.1')
+depends=('fontconfig')
+makedepends=('curl')
+install="$pkgname.install"
+source=()
+sha256sums=()
+
+_android_ua="Mozilla/5.0 (Linux; U; Android 2.2; en-us; Nexus One Build/FRF91) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1"
+
+_weight_name() {
+  case "$1" in
+  100) echo "Thin" ;;
+  200) echo "ExtraLight" ;;
+  300) echo "Light" ;;
+  400) echo "Regular" ;;
+  500) echo "Medium" ;;
+  600) echo "SemiBold" ;;
+  700) echo "Bold" ;;
+  800) echo "ExtraBold" ;;
+  900) echo "Black" ;;
+  *) echo "Unknown" ;;
+  esac
+}
+
+prepare() {
+  mkdir -p "$srcdir/google-sans"
+
+  msg2 "Fetching Google Sans font URLs from Google Fonts API..."
+  local css
+  css=$(curl -s \
+    -A "$_android_ua" \
+    "https://fonts.googleapis.com/css2?family=Google+Sans:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900")
+
+  if [[ -z "$css" ]]; then
+    error "Failed to fetch font CSS from Google Fonts API."
+    return 1
+  fi
+
+  while read -r weight style url; do
+    local weight_name filename
+    weight_name=$(_weight_name "$weight")
+
+    if [[ "$style" == "italic" ]]; then
+      if [[ "$weight_name" == "Regular" ]]; then
+        filename="GoogleSans-Italic.ttf"
+      else
+        filename="GoogleSans-${weight_name}Italic.ttf"
+      fi
+    else
+      filename="GoogleSans-${weight_name}.ttf"
+    fi
+
+    msg2 "Downloading $filename..."
+    curl -s -L \
+      -A "$_android_ua" \
+      -o "$srcdir/google-sans/$filename" \
+      "$url"
+
+    if ! file "$srcdir/google-sans/$filename" | grep -q "TrueType\|font"; then
+      error "$filename does not appear to be a valid font file."
+      return 1
+    fi
+  done < <(awk '
+        /font-style/  { gsub(/.*font-style:[[:space:]]*|;[[:space:]]*$/, ""); style=$0 }
+        /font-weight/ { gsub(/.*font-weight:[[:space:]]*|;[[:space:]]*$/, ""); weight=$0 }
+        /src: url/    { gsub(/.*url\(|\).*/, ""); url=$0 }
+        /^}/          { if (weight && style && url) print weight, style, url
+                        weight=""; style=""; url="" }
+    ' <<<"$css")
+}
+
+package() {
+  install -dm755 "$pkgdir/usr/share/fonts/google-sans"
+
+  find "$srcdir/google-sans" -name "*.ttf" -exec \
+    install -Dm644 {} "$pkgdir/usr/share/fonts/google-sans/" \;
+}
